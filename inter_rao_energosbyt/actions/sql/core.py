@@ -6,6 +6,7 @@ __all__ = (
     "Init",
     "MenuSettings",
     "NoticeRoutine",
+    "SendTfa",
 )
 
 from typing import Any, ClassVar, Mapping, Optional, TYPE_CHECKING
@@ -202,6 +203,38 @@ class Init(ResultCodeMappingBase):
 
         return await api.async_action_map(cls, ACTION_SQL, query, data)
 
+#################################################################################
+# Plain query: SendTfa
+#################################################################################
+
+
+@attr.s(kw_only=True, frozen=True, slots=True)
+class SendTfa(ResultCodeMappingBase):
+    returns_single: ClassVar[bool] = True
+
+    @classmethod
+    async def async_request(
+        cls,
+        api: "BaseEnergosbytAPI",
+        data: Optional[Mapping[str, Any]] = None,
+        query: str = "SendTfa",
+        id_profile: Any = None,
+        kd_tfa: Any = None,
+        vl_tfa_auth_token: Any = None,
+    ):
+        """Query request: SendTfa"""
+        data = {} if data is None else dict(data)
+
+        if data.get("id_profile") is None and id_profile is not None:
+            data["id_profile"] = id_profile
+
+        if data.get("kd_tfa") is None and kd_tfa is not None:
+            data["kd_tfa"] = kd_tfa
+
+        if data.get("vl_tfa_auth_token") is None and vl_tfa_auth_token is not None:
+            data["vl_tfa_auth_token"] = vl_tfa_auth_token
+
+        return await api.async_action_map(cls, ACTION_SQL, query, data)
 
 #################################################################################
 # Plain query: MenuSettings

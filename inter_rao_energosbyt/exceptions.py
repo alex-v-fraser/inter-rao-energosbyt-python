@@ -18,7 +18,17 @@ class ResponseCodeError(EnergosbytException):
 
     def __str__(self) -> str:
         return "Error [%d]: %s" % (int(self), self.args[1])
+        
+class TfaRequired(EnergosbytException):
+    """Two-factor authentication is required"""
 
+    def __init__(self, response) -> None:
+        super().__init__(
+            "Two-factor authentication required",
+            response.kd_result,
+            response.nm_result,
+        )
+        self.response = response
 
 class QueryArgumentException(EnergosbytException):
     def __init__(self, query_argument: str, *args) -> None:

@@ -22,6 +22,7 @@ __all__ = (
     "AbstractAccountWithMeterHistory",
     "AccountID",
     "SupportedAccountsType",
+    "TfaRequired",
 )
 import asyncio
 import inspect
@@ -65,7 +66,7 @@ from inter_rao_energosbyt.actions import ActionResult, DataMapping
 from inter_rao_energosbyt.actions.auth import Login
 from inter_rao_energosbyt.actions.invalidate import ProfileExit
 from inter_rao_energosbyt.actions.sql.attributes import Attribute, GetLSAttributes
-from inter_rao_energosbyt.actions.sql.core import Init
+from inter_rao_energosbyt.actions.sql.core import Init, SendTfa
 from inter_rao_energosbyt.actions.sql.generic import GetContactPhone
 from inter_rao_energosbyt.actions.sql.ls_generic import IndicationAndPayAvail
 from inter_rao_energosbyt.actions.sql.ls_management import (
@@ -80,7 +81,7 @@ from inter_rao_energosbyt.actions.sql.ls_management import (
 )
 from inter_rao_energosbyt.const import DEFAULT_USER_AGENT
 from inter_rao_energosbyt.enums import ERROR_MESSAGES, ProviderType, ResponseCodes, ServiceType
-from inter_rao_energosbyt.exceptions import EnergosbytException, UnsupportedAccountException
+from inter_rao_energosbyt.exceptions import EnergosbytException, TfaRequired, UnsupportedAccountException
 from inter_rao_energosbyt.util import (
     AnyDateArg,
     SupportsLessThan,
@@ -307,6 +308,7 @@ class BaseEnergosbytAPI(ABC):
         "max_request_attempts",
         "password",
         "username",
+        "tfa_device_token",
     )
 
     LOGGER: ClassVar[logging.Logger] = logging.getLogger(__name__)
@@ -382,11 +384,13 @@ class BaseEnergosbytAPI(ABC):
         user_agent: Optional[str] = None,
         max_request_attempts: int = 3,
         max_simultaneous_requests: int = 10,
+        tfa_device_token: Optional[str] = None,
     ):
         self.username: str = username
         self.password: str = password
         self.auth_session: Optional[Login] = None
         self.max_request_attempts: int = max_request_attempts
+        self.tfa_device_token = tfa_device_token
 
         self._accounts: Optional[Dict[AccountID, Account]] = None
 
@@ -606,11 +610,16 @@ class BaseEnergosbytAPI(ABC):
     def is_authenticated(self) -> bool:
         return self.auth_session is not None and self.auth_session.is_success
 
-    async def async_authenticate(self) -> None:
-        # This is required to reset session cookie
-        self._session.cookie_jar.clear()
-        async with self._session.get(self.AUTH_URL) as response:
-            pass
+    async def async_authenticate(
+        self,
+        nn_tfa_code: Optional[str] = None,
+        kd_tfa: Optional[int] = None,
+        reset_session: bool = True,
+    ) -> None:
+        if reset_session:
+            self._session.cookie_jar.clear()
+            async with self._session.get(self.AUTH_URL):
+                pass
 
         response = (
             await Login.async_request(
@@ -618,13 +627,19 @@ class BaseEnergosbytAPI(ABC):
                 login=self.username,
                 psw=self.password,
                 vl_device_info={
-                    "appVer": self.APP_VERSION,
+                    "appver": self.APP_VERSION,
                     "type": "browser",
                     "userAgent": self._session.headers[aiohttp.hdrs.USER_AGENT],
                 },
                 remember=True,
+                nn_tfa_code=nn_tfa_code,
+                kd_tfa=kd_tfa,
+                vl_tfa_device_token=self.tfa_device_token,
             )
         ).single()
+
+        if response.kd_result == 1053 and not nn_tfa_code:
+            raise TfaRequired(response)
 
         if not response.is_success:
             raise EnergosbytException(
@@ -635,11 +650,47 @@ class BaseEnergosbytAPI(ABC):
 
         self.auth_session = response
 
+        if response.vl_tfa_device_token:
+            self.tfa_device_token = response.vl_tfa_device_token
+
         try:
             await Init.async_request(self)
         except EnergosbytException:
             self.auth_session = None
             raise
+            
+    async def async_send_tfa(
+        self,
+        login_response: Login,
+        kd_tfa: int = 2,
+    ) -> None:
+        """Request sending a TFA code/call after auth/login returned kd_result=1053."""
+
+        id_profile = getattr(login_response, "id_profile", None)
+        vl_tfa_auth_token = getattr(login_response, "vl_tfa_auth_token", None)
+
+        if not id_profile or not vl_tfa_auth_token:
+            raise EnergosbytException(
+                "TFA data missing",
+                getattr(login_response, "kd_result", None),
+                getattr(login_response, "nm_result", None),
+            )
+
+        response = (
+            await SendTfa.async_request(
+                self,
+                id_profile=id_profile,
+                kd_tfa=kd_tfa,
+                vl_tfa_auth_token=vl_tfa_auth_token,
+            )
+        ).single()
+
+        if not response.is_success:
+            raise EnergosbytException(
+                "TFA sending failed",
+                response.kd_result,
+                response.nm_result,
+            )
 
     async def async_deauthenticate(self, token: Optional[str] = None) -> None:
         if token is None:

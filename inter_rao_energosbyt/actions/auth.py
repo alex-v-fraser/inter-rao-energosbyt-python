@@ -38,6 +38,9 @@ class Login(ResultCodeMappingBase, ActionRequest):
         login: Any = None,
         psw: Any = None,
         remember: Any = None,
+        nn_tfa_code: Any = None,
+        kd_tfa: Any = None,
+        vl_tfa_device_token: Any = None,
         vl_device_info: Any = None,
     ):
         """Action request: ProfileExit
@@ -64,8 +67,20 @@ class Login(ResultCodeMappingBase, ActionRequest):
         if data.get("vl_device_info") is None and vl_device_info is not None:
             data["vl_device_info"] = vl_device_info
 
+        if data.get("nn_tfa_code") is None and nn_tfa_code is not None:
+            data["nn_tfa_code"] = nn_tfa_code
+
+        if data.get("kd_tfa") is None and kd_tfa is not None:
+            data["kd_tfa"] = kd_tfa
+        
+        if data.get("vl_tfa_device_token") is None and vl_tfa_device_token is not None:
+            data["vl_tfa_device_token"] = vl_tfa_device_token
+        
         return await api.async_action_map(cls, ACTION_AUTH, query, data)
 
+    method_tfa: Optional[Mapping[str, Any]] = attr.ib(default=None)
+    vl_tfa_auth_token: Optional[str] = attr.ib(converter=conv_str_optional, default=None)
+    vl_tfa_device_token: Optional[str] = attr.ib(converter=conv_str_optional, default=None)
     cnt_auth: Optional[int] = attr.ib(converter=conv_int_optional, default=None)
     id_profile: Optional[str] = attr.ib(converter=conv_str_optional, default=None)
     new_token: Optional[str] = attr.ib(converter=conv_str_optional, default=None)
