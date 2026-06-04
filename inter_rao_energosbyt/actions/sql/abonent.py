@@ -332,7 +332,7 @@ class AbonentEquipment(DataMapping):
     dt_last_indication: Optional[str] = attr.ib(converter=conv_str_optional, default=None)
     """Last indication date"""
 
-    dt_mpi: str = attr.ib(converter=str)
+    dt_mpi: Optional[str] = attr.ib(converter=conv_str_optional, default=None)
     """Checkup date"""
 
     id_billing_counter: int = attr.ib(converter=int)
