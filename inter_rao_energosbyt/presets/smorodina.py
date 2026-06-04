@@ -190,7 +190,7 @@ class SmorodinaMeter(MeterContainer, WithAccount["AccountWithSmorodinaMeters"]):
 
     @classmethod
     def from_response(cls, account: "AccountWithSmorodinaMeters", data: "AbonentEquipment"):
-        checkup_date = conv_datestr(data.dt_mpi)
+        checkup_date = conv_datestr_optional(data.dt_mpi)
 
         today_indication: Optional[float] = None
         last_indications_date = data.dt_last_indication
@@ -211,7 +211,7 @@ class SmorodinaMeter(MeterContainer, WithAccount["AccountWithSmorodinaMeters"]):
             period_end_day=data.nn_ind_receive_end,
             checkup=SmorodinaCheckupStatus(
                 date=checkup_date,
-                year=checkup_date.year,
+                year=checkup_date.year if checkup_date is not None else 0,
             ),
             zones={
                 ("t1"): MeterZoneContainer(
